@@ -1,6 +1,6 @@
 import pool from '../../../lib/db';
 import bcrypt from 'bcryptjs';
-import { signToken, setTokenCookie } from '../../../lib/auth';
+import { signToken, setTokenCookie, signRefreshToken } from '../../../lib/auth';
 import crypto from 'crypto';
 
 const LICENSE_SECRET = process.env.LICENSE_SECRET;
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     // Enkripsi data yang diperlukan
     const fingerprintHmac = crypto.createHmac('sha256', LICENSE_SECRET).update(fingerprint).digest('hex');
 
-    // Buat JWT token
+    // Buat akses token
     const token = signToken({
       uid: user.id,
       role: user.role,
@@ -46,8 +46,14 @@ export default async function handler(req, res) {
       data: fingerprintHmac
     });
 
+    // Buat refresh token
+    const refresh_token = signRefreshToken({
+      uid: user.id,
+      data: fingerprintHmac
+    });
+
     // Set cookie
-    setTokenCookie(res, token);
+    //setTokenCookie(res, token);
 
     // Kirim response sukses
     res.status(200).json({
@@ -60,8 +66,9 @@ export default async function handler(req, res) {
         akses: user.akses
       },
       accessToken: token,
-      fingerprint: fingerprintHmac,
+      refreshToken: refresh_token
     });
+
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
