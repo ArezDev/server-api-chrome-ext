@@ -1,4 +1,4 @@
-import pool from '../../../lib/db';
+import pool, { query } from '../../../lib/db';
 import bcrypt from 'bcryptjs';
 import { signToken, setTokenCookie, signRefreshToken } from '../../../lib/auth';
 import crypto from 'crypto';
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   try {
     // Ambil user berdasarkan username
     const [rows] = await pool.execute(
-      'SELECT id, username, password, role, max_chrome, akses FROM server_extensions.users WHERE username = ? LIMIT 1',
+      'SELECT id, username, password, role, max_chrome, akses, refresh_version FROM users WHERE username = ? LIMIT 1',
       [username]
     );
 
@@ -46,28 +46,40 @@ export default async function handler(req, res) {
       data: fingerprintHmac
     });
 
+    // Buat versi token
+    const versiTokenSaiki = user.refresh_version;
+    const newVer = versiTokenSaiki + 1
+
     // Buat refresh token
     const refresh_token = signRefreshToken({
       uid: user.id,
-      data: fingerprintHmac
+      data: fingerprintHmac,
+      type: 'refresh',
+      ver: newVer
     });
 
-    // Set cookie
-    //setTokenCookie(res, token);
+    const updateUserVersion = await query("UPDATE users SET refresh_version = ? WHERE id = ?", [
+      newVer,
+      user.id,
+    ]);
 
-    // Kirim response sukses
-    res.status(200).json({
-      ok: true,
-      user: {
-        id: user.id,
-        role: user.role,
-        user: user.username,
-        max_chrome: user.max_chrome,
-        akses: user.akses
-      },
-      accessToken: token,
-      refreshToken: refresh_token
-    });
+    if (updateUserVersion.affectedRows > 0) {
+      // Kirim response sukses
+      res.status(200).json({
+        ok: true,
+        user: {
+          id: user.id,
+          role: user.role,
+          user: user.username,
+          max_chrome: user.max_chrome,
+          akses: user.akses
+        },
+        accessToken: token,
+        refreshToken: refresh_token
+      });
+    } else {
+      res.status(200).json({ ok: true });
+    }
 
   } catch (err) {
     console.error('Login error:', err);
